@@ -43,7 +43,7 @@
 
         <!-- Image -->
         <div class="w-full aspect-square max-w-[320px] bg-indigo-50/50 rounded-[2.5rem] mb-8 flex items-center justify-center relative overflow-hidden shadow-inner">
-            <img id="word-image" src="" alt="word" class="w-full h-full object-contain p-8 drop-shadow-xl transition-opacity duration-300" onerror="this.src='https://via.placeholder.com/400?text=Image+Missing'">
+            <img id="word-image" src="" alt="word" class="w-full h-full object-contain p-8 drop-shadow-xl transition-opacity duration-300" onerror="handleImageError(this)">
         </div>
 
         <!-- Word Boxes -->
@@ -91,11 +91,15 @@
         const helperText = document.getElementById('helper-text');
         const dotsContainer = document.getElementById('dots-container');
 
+        function handleImageError(img) {
+            console.error("Failed to load image at:", img.src);
+            img.src = 'https://via.placeholder.com/400?text=Image+Not+Found';
+        }
+
         function startNewWord() {
             const list = WORD_DATABASE[currentLang];
             let newIndex = Math.floor(Math.random() * list.length);
             
-            // Ensure we don't pick the same word twice in a row
             if (newIndex === currentWordIndex && list.length > 1) {
                 newIndex = (newIndex + 1) % list.length;
             }
@@ -106,11 +110,14 @@
             
             successOverlay.classList.add('hidden');
             
-            // Generate path based on 1-indexed ID from generator
             const suffix = currentLang === 'en' ? 'eng' : 'heb';
             const fileName = `${currentWordIndex + 1}-${suffix}.png`;
+            
+            // Using ./images/ helps ensure relative path works on GitHub project pages
+            const imagePath = `./images/${fileName}`;
+            
             wordImage.style.opacity = '0';
-            wordImage.src = `images/${fileName}`;
+            wordImage.src = imagePath;
             wordImage.onload = () => wordImage.style.opacity = '1';
             
             renderWord();
@@ -184,7 +191,6 @@
             const targetWord = WORD_DATABASE[currentLang][currentWordIndex];
             const targetChar = targetWord[typedCount];
 
-            // Direct comparison (works for both English and Hebrew)
             if (e.key.toLowerCase() === targetChar.toLowerCase()) {
                 typedCount++;
                 renderWord();
