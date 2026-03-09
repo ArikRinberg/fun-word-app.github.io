@@ -43,7 +43,7 @@
 
         <!-- Image -->
         <div class="w-full aspect-square max-w-[320px] bg-indigo-50/50 rounded-[2.5rem] mb-8 flex items-center justify-center relative overflow-hidden shadow-inner">
-            <img id="word-image" src="" alt="word" class="w-full h-full object-contain p-8 drop-shadow-xl transition-opacity duration-300" onerror="handleImageError(this)">
+            <img id="word-image" alt="word" class="w-full h-full object-contain p-8 drop-shadow-xl transition-opacity duration-300 opacity-0">
         </div>
 
         <!-- Word Boxes -->
@@ -91,6 +91,9 @@
         const helperText = document.getElementById('helper-text');
         const dotsContainer = document.getElementById('dots-container');
 
+        // Dynamically attach the error handler to prevent race conditions on initial page load
+        wordImage.onerror = function() { handleImageError(this); };
+
         function handleImageError(img) {
             // Check if we are already showing the fallback to prevent infinite loops
             if (img.dataset.error === "true") return;
@@ -133,8 +136,10 @@
             
             wordImage.dataset.error = "false";
             wordImage.style.opacity = '0';
-            wordImage.src = imagePath;
+            
+            // Assign the onload handler BEFORE setting the source to ensure it fires correctly
             wordImage.onload = () => wordImage.style.opacity = '1';
+            wordImage.src = imagePath;
             
             renderWord();
         }
@@ -180,7 +185,6 @@
                 skipText.innerText = 'מילה חדשה';
                 helperText.innerText = 'מצא את המקשים במקלדת שלך';
                 successMsg.innerText = 'כל הכבוד!';
-                wordContainer.classList.add('flex-row-reverse');
             } else {
                 bodyBg.classList.replace('bg-rose-50', 'bg-indigo-50');
                 bodyBg.classList.replace('rtl', 'ltr');
@@ -188,7 +192,6 @@
                 skipText.innerText = 'SKIP WORD';
                 helperText.innerText = 'Find the keys on your keyboard';
                 successMsg.innerText = 'AMAZING!';
-                wordContainer.classList.remove('flex-row-reverse');
             }
             
             startNewWord();
