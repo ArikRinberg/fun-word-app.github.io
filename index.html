@@ -11,6 +11,7 @@
         .rtl { direction: rtl; }
         .ltr { direction: ltr; }
         .letter-box { transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .key-transition { transition: all 0.2s ease-in-out; }
         @keyframes pop {
             0% { transform: scale(1); }
             50% { transform: scale(1.1); }
@@ -33,34 +34,45 @@
     </div>
 
     <!-- Main Game Card -->
-    <div class="w-full max-w-xl bg-white rounded-[3rem] shadow-2xl p-6 md:p-10 flex flex-col items-center relative border-b-[16px] border-slate-200 overflow-hidden">
+    <div id="game-card" class="w-full max-w-xl bg-white rounded-[3rem] shadow-2xl p-6 md:p-8 flex flex-col items-center relative border-b-[16px] border-slate-200 overflow-hidden transition-colors duration-300">
         
+        <!-- Keyboard Language Warning Toast -->
+        <div id="keyboard-warning" class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-full opacity-0 bg-red-500 text-white px-6 py-2 rounded-b-2xl font-bold text-sm shadow-md transition-all duration-300 flex items-center gap-2 z-50 whitespace-nowrap">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span id="warning-text"></span>
+        </div>
+
         <!-- Success State -->
-        <div id="success-overlay" class="absolute inset-0 bg-emerald-500/95 flex flex-col items-center justify-center z-40 text-white hidden">
+        <div id="success-overlay" class="absolute inset-0 bg-emerald-500 flex flex-col items-center justify-center z-40 text-white hidden">
             <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="yellow" stroke="yellow" class="mb-4 animate-bounce"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             <h2 id="success-msg" class="text-6xl font-black tracking-tighter italic drop-shadow-lg">AMAZING!</h2>
         </div>
 
         <!-- Image -->
-        <div class="w-full aspect-square max-w-[320px] bg-indigo-50/50 rounded-[2.5rem] mb-8 flex items-center justify-center relative overflow-hidden shadow-inner">
-            <img id="word-image" alt="word" class="w-full h-full object-contain p-8 drop-shadow-xl transition-opacity duration-300 opacity-0">
+        <div class="w-full aspect-square max-w-[240px] md:max-w-[280px] bg-indigo-50/50 rounded-[2.5rem] mb-6 flex items-center justify-center relative overflow-hidden shadow-inner">
+            <img id="word-image" alt="word" class="w-full h-full object-contain p-6 transition-opacity duration-300 opacity-0">
         </div>
 
         <!-- Word Boxes -->
-        <div id="word-container" class="flex flex-wrap justify-center gap-3 md:gap-4 mb-10"></div>
+        <div id="word-container" class="flex flex-wrap justify-center gap-3 md:gap-4 mb-8"></div>
 
-        <div class="bg-slate-50 px-6 py-3 rounded-2xl text-slate-400 text-xs font-bold uppercase tracking-widest border border-slate-100">
+        <!-- Virtual Keyboard -->
+        <div id="virtual-keyboard" class="flex flex-col gap-1.5 md:gap-2 mb-4 w-full items-center" dir="ltr">
+            <!-- Keys injected via JS -->
+        </div>
+
+        <div class="bg-slate-50 px-6 py-2.5 rounded-2xl text-slate-400 text-xs font-bold uppercase tracking-widest border border-slate-100">
             <span id="helper-text">Find the keys on your keyboard</span>
         </div>
     </div>
 
     <!-- Actions -->
-    <button id="skip-btn" class="mt-8 bg-white hover:bg-slate-50 text-slate-500 px-10 py-4 rounded-3xl font-black shadow-lg border-2 border-slate-100 transition-all active:scale-95">
+    <button id="skip-btn" class="mt-6 bg-white hover:bg-slate-50 text-slate-500 px-10 py-4 rounded-3xl font-black shadow-lg border-2 border-slate-100 transition-all active:scale-95">
         <span id="skip-text">SKIP WORD</span>
     </button>
 
     <!-- Progress Tracker -->
-    <div id="dots-container" class="mt-auto py-10 flex gap-2 flex-wrap justify-center max-w-xl opacity-40"></div>
+    <div id="dots-container" class="mt-auto py-8 flex gap-2 flex-wrap justify-center max-w-xl opacity-40"></div>
 
     <script>
         // Word lists strictly matching the order in generator.html
@@ -73,11 +85,27 @@
             ]
         };
 
+        const KEYBOARD_LAYOUTS = {
+            en: [
+                ['q','w','e','r','t','y','u','i','o','p'],
+                ['a','s','d','f','g','h','j','k','l'],
+                ['z','x','c','v','b','n','m']
+            ],
+            he: [
+                ['ק','ר','א','ט','ו','ן','ם','פ'],
+                ['ש','ד','ג','כ','ע','י','ח','ל','ך','ף'],
+                ['ז','ס','ב','ה','נ','מ','צ','ת','ץ']
+            ]
+        };
+
         let currentLang = 'en';
         let currentWordIndex = -1;
         let typedCount = 0;
         let score = 0;
         let isSuccess = false;
+        let warningTimeout;
+        let hintTimer = null;
+        let highlightedKey = null;
 
         const bodyBg = document.getElementById('body-bg');
         const langToggle = document.getElementById('lang-toggle');
@@ -85,23 +113,22 @@
         const scoreDisplay = document.getElementById('score-display');
         const wordImage = document.getElementById('word-image');
         const wordContainer = document.getElementById('word-container');
+        const virtualKeyboard = document.getElementById('virtual-keyboard');
         const successOverlay = document.getElementById('success-overlay');
         const successMsg = document.getElementById('success-msg');
         const skipText = document.getElementById('skip-text');
         const helperText = document.getElementById('helper-text');
         const dotsContainer = document.getElementById('dots-container');
+        const gameCard = document.getElementById('game-card');
+        const keyboardWarning = document.getElementById('keyboard-warning');
+        const warningText = document.getElementById('warning-text');
 
-        // Dynamically attach the error handler to prevent race conditions on initial page load
         wordImage.onerror = function() { handleImageError(this); };
 
         function handleImageError(img) {
-            // Check if we are already showing the fallback to prevent infinite loops
             if (img.dataset.error === "true") return;
-            
             console.error("Failed to load image at:", img.src);
             img.dataset.error = "true";
-            
-            // Use an inline SVG fallback so we don't depend on another external URL
             img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
                 <svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
                     <rect width="100%" height="100%" fill="#f1f5f9"/>
@@ -110,6 +137,67 @@
                     </text>
                 </svg>
             `)}`;
+        }
+
+        function showKeyboardWarning(msg) {
+            warningText.innerText = msg;
+            keyboardWarning.classList.remove('-translate-y-full', 'opacity-0');
+            keyboardWarning.classList.add('translate-y-0', 'opacity-100');
+            clearTimeout(warningTimeout);
+            warningTimeout = setTimeout(hideKeyboardWarning, 3500);
+        }
+
+        function hideKeyboardWarning() {
+            keyboardWarning.classList.remove('translate-y-0', 'opacity-100');
+            keyboardWarning.classList.add('-translate-y-full', 'opacity-0');
+        }
+
+        function renderKeyboard() {
+            virtualKeyboard.innerHTML = '';
+            const layout = KEYBOARD_LAYOUTS[currentLang];
+            
+            layout.forEach(row => {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'flex justify-center gap-1 md:gap-1.5 w-full';
+                
+                row.forEach(char => {
+                    const keyEl = document.createElement('div');
+                    keyEl.id = `vk-${char}`;
+                    keyEl.className = 'w-7 h-9 md:w-9 md:h-11 bg-slate-100 rounded-lg flex items-center justify-center font-bold text-slate-500 uppercase text-sm md:text-base border-b-4 border-slate-200 key-transition shadow-sm';
+                    keyEl.innerText = char;
+                    rowDiv.appendChild(keyEl);
+                });
+                
+                virtualKeyboard.appendChild(rowDiv);
+            });
+        }
+
+        function clearHint() {
+            if (hintTimer) clearTimeout(hintTimer);
+            if (highlightedKey) {
+                highlightedKey.classList.remove('bg-yellow-400', 'border-yellow-500', 'text-yellow-900', 'animate-pulse', 'scale-110', 'z-10');
+                highlightedKey.classList.add('bg-slate-100', 'border-slate-200', 'text-slate-500');
+                highlightedKey = null;
+            }
+        }
+
+        function startHintTimer() {
+            clearHint();
+            if (isSuccess) return;
+
+            hintTimer = setTimeout(() => {
+                const targetWord = WORD_DATABASE[currentLang][currentWordIndex];
+                if (typedCount < targetWord.length) {
+                    const targetChar = targetWord[typedCount].toLowerCase();
+                    const keyEl = document.getElementById(`vk-${targetChar}`);
+                    
+                    if (keyEl) {
+                        keyEl.classList.remove('bg-slate-100', 'border-slate-200', 'text-slate-500');
+                        keyEl.classList.add('bg-yellow-400', 'border-yellow-500', 'text-yellow-900', 'animate-pulse', 'scale-110', 'z-10');
+                        highlightedKey = keyEl;
+                    }
+                }
+            }, 5000);
         }
 
         function startNewWord() {
@@ -125,23 +213,21 @@
             isSuccess = false;
             
             successOverlay.classList.add('hidden');
+            hideKeyboardWarning();
+            gameCard.classList.remove('border-emerald-600');
+            gameCard.classList.add('border-slate-200');
             
             const suffix = currentLang === 'en' ? 'eng' : 'heb';
             const fileName = `${currentWordIndex + 1}-${suffix}.png`;
-            
-            // Log the filename to the console to help you debug GitHub Pages
-            console.log(`Loading: images/${fileName}`);
-            
             const imagePath = `./images/${fileName}`;
             
             wordImage.dataset.error = "false";
             wordImage.style.opacity = '0';
-            
-            // Assign the onload handler BEFORE setting the source to ensure it fires correctly
             wordImage.onload = () => wordImage.style.opacity = '1';
             wordImage.src = imagePath;
             
             renderWord();
+            startHintTimer();
         }
 
         function renderWord() {
@@ -154,7 +240,7 @@
                 const isTyped = index < typedCount;
                 const isNext = index === typedCount;
 
-                box.className = `letter-box relative w-14 h-18 md:w-16 md:h-22 rounded-2xl flex items-center justify-center text-4xl md:text-5xl font-black uppercase border-b-[10px] shadow-sm`;
+                box.className = `letter-box relative w-12 h-16 md:w-16 md:h-20 rounded-2xl flex items-center justify-center text-3xl md:text-5xl font-black uppercase border-b-[8px] md:border-b-[10px] shadow-sm`;
                 
                 if (isTyped) {
                     box.classList.add('bg-green-500', 'text-white', 'border-green-700', '-translate-y-2', 'animate-pop');
@@ -165,8 +251,8 @@
                 if (isNext) {
                     box.classList.add('ring-4', 'ring-indigo-300', 'ring-offset-4', 'ring-offset-white');
                     const zap = document.createElement('div');
-                    zap.className = 'absolute -bottom-14 animate-bounce';
-                    zap.innerHTML = `<svg width="32" height="32" viewBox="0 0 24 24" fill="gold"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`;
+                    zap.className = 'absolute -bottom-10 md:-bottom-14 animate-bounce';
+                    zap.innerHTML = `<svg width="28" height="28" viewBox="0 0 24 24" fill="gold"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`;
                     box.appendChild(zap);
                 }
 
@@ -194,6 +280,7 @@
                 successMsg.innerText = 'AMAZING!';
             }
             
+            renderKeyboard();
             startNewWord();
         }
 
@@ -206,21 +293,48 @@
 
         window.addEventListener('keydown', (e) => {
             if (isSuccess || currentWordIndex === -1) return;
+            
+            if (e.key.length !== 1) return;
 
             const targetWord = WORD_DATABASE[currentLang][currentWordIndex];
             const targetChar = targetWord[typedCount];
 
+            // Reset the hint timer upon any character key press
+            startHintTimer();
+
             if (e.key.toLowerCase() === targetChar.toLowerCase()) {
+                hideKeyboardWarning();
                 typedCount++;
                 renderWord();
 
+                // Animate the virtual key briefly for positive feedback
+                const pressedKeyEl = document.getElementById(`vk-${e.key.toLowerCase()}`);
+                if (pressedKeyEl) {
+                    pressedKeyEl.classList.add('bg-indigo-100', 'scale-90');
+                    setTimeout(() => pressedKeyEl.classList.remove('bg-indigo-100', 'scale-90'), 150);
+                }
+
                 if (typedCount === targetWord.length) {
                     isSuccess = true;
+                    clearHint(); // ensure hint doesn't pop up after win
                     score++;
                     scoreDisplay.innerText = score;
+                    
                     successOverlay.classList.remove('hidden');
+                    gameCard.classList.remove('border-slate-200');
+                    gameCard.classList.add('border-emerald-600');
+                    
                     addAchievementDot();
                     setTimeout(startNewWord, 2000);
+                }
+            } else {
+                const isEnglishChar = /^[a-zA-Z]$/.test(e.key);
+                const isHebrewChar = /^[\u0590-\u05FF]$/.test(e.key);
+
+                if (currentLang === 'en' && isHebrewChar) {
+                    showKeyboardWarning('Please switch your keyboard to English!');
+                } else if (currentLang === 'he' && isEnglishChar) {
+                    showKeyboardWarning('נא להעביר את המקלדת לעברית!');
                 }
             }
         });
@@ -228,7 +342,10 @@
         langToggle.addEventListener('click', toggleLanguage);
         document.getElementById('skip-btn').addEventListener('click', startNewWord);
 
-        window.onload = startNewWord;
+        window.onload = () => {
+            renderKeyboard();
+            startNewWord();
+        };
     </script>
 </body>
 </html>
